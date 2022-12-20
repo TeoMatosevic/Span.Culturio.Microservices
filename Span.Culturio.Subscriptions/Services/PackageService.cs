@@ -21,19 +21,5 @@ namespace Span.Culturio.Subscriptions.Services {
             }
             return null;
         }
-        public async Task<int?> GetValidDays(int packageId) {
-            var package = await GetPackage(packageId);
-            if (package == null) {
-                return null;
-            }
-            var validDays = package.ValidDays;
-            return validDays;
-        }
-        public async Task<IEnumerable<PackageItemDto>> GetPackageItems(int packageId) {
-            var package = await GetPackage(packageId);
-            if (package == null) return null;
-            var packageItems = package.CultureObjects;
-            return packageItems;
-        }
     }
 }

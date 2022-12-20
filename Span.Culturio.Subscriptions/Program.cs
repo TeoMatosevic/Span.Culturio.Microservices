@@ -1,3 +1,8 @@
+using Microsoft.EntityFrameworkCore;
+using Span.Culturio.Core;
+using Span.Culturio.Subscriptions.Data;
+using Span.Culturio.Subscriptions.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -5,7 +10,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.RegisterApiServices(builder.Configuration.GetSection("Jwt:Key").Value);
+builder.Services.AddDbContext<DataContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddHttpClient("api");
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<IPackageService, PackageService>();
 
 var app = builder.Build();
 

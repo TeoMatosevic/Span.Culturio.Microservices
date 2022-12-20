@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using Span.Culturio.Core.Models.Package;
 using Span.Culturio.Core.Models.Subscription;
 using Span.Culturio.Subscriptions.Data;
@@ -13,20 +14,24 @@ namespace Span.Culturio.Subscriptions.Services {
             _context = context;
             _mapper = mapper;
         }
-        public async Task<string> Activate(ActivateDto activateDto, int valiDays) {
-            var subsription = await _context.Subscriptions.FindAsync(activateDto.SubscriptionId);
-            if (subsription is null) {
-                return null;
-            }
-            if (subsription.State == "Active") {
-                return "Subsription already active";
-            }
-            subsription.ActiveFrom = DateTime.Now;
-            subsription.State = "Active";
-            _context.Subscriptions.Update(subsription);
+
+        public async Task<string> Activate(ActivateDto activateDto, int validDays) {
+            var subscription = await _context.Subscriptions.FindAsync(activateDto.SubscriptionId);
+            if (subscription is null) return "SubscriptionNotFound";
+
+            if (subscription.State == "active") return "SubscriptionAlreadyActive";
+
+            subscription.State = "active";
+            subscription.ActiveFrom = DateTime.Now;
+            subscription.ActiveTO = DateTime.Now.AddDays(validDays);
+            _context.Subscriptions.Update(subscription);
             await _context.SaveChangesAsync();
 
-            return "Subscription activated";
+            return "SubscriptionActivated";
+        }
+
+        public Task<string> Activate(ActivateDto activateDto) {
+            throw new NotImplementedException();
         }
 
         public async Task<SubscriptionDto> CreateAsync(CreateSubscriptionDto createSubscriptionDto) {
@@ -37,34 +42,59 @@ namespace Span.Culturio.Subscriptions.Services {
             subscription.State = "Inactive";
             subscription.RecordedVisits = 0;
 
-            await _context.AddAsync(subscription);
+            await _context.Subscriptions.AddAsync(subscription);
             await _context.SaveChangesAsync();
 
+            var subscriptionDto = _mapper.Map<SubscriptionDto>(subscription);
+            return subscriptionDto;
+        }
+
+        public async Task<string> CreateVisit(int subscriptionId, List<PackageItemDto> packageItemsDto) {
+            packageItemsDto.ForEach(async x => {
+                var visit = new Visits {
+                    SubscriptionId = subscriptionId,
+                    CultureObjectId = x.Id,
+                    AvailableVisits = x.AvailableVisits,
+                };
+
+                await _context.AddAsync(visit);
+            });
+            await _context.SaveChangesAsync();
+
+            return "Success";
+        }
+
+        public async Task<IEnumerable<SubscriptionDto>> GetAsync(int userId) {
+            var subscriptions = await _context.Subscriptions.Where(x => x.UserId == userId).ToListAsync();
+            var subscriptionsDto = _mapper.Map<List<SubscriptionDto>>(subscriptions);
+
+            return subscriptionsDto;
+        }
+
+        public async Task<SubscriptionDto> GetById(int subscriptionId) {
+            var subscription = await _context.Subscriptions.FindAsync(subscriptionId);
             var subscriptionDto = _mapper.Map<SubscriptionDto>(subscription);
 
             return subscriptionDto;
         }
 
-        public Task<SubscriptionDto> GetAsync(int userId) {
-            throw new NotImplementedException();
-        }
+        public async Task<string> TrackVisit(TrackVisitDto trackVisitDto) {
+            var subscription = await _context.Subscriptions.FindAsync(trackVisitDto.SubscriptonId);
+            if (subscription is null) return "SubscriptionNotFound";
+            if (subscription.State != "active") return "SubscriptionNotActive";
 
-        public Task<string> TrackVisit(TrackVisitDto trackVisitDto) {
-            throw new NotImplementedException();
+            var visit = await _context.Visits.FirstAsync(x => x.SubscriptionId == trackVisitDto.SubscriptonId && x.CultureObjectId == trackVisitDto.CultureObjectId);
+            if (visit is null) return "VisitNotFound";
+
+            var visitsLeft = visit.AvailableVisits;
+            if (visitsLeft == 0) return "NoVisitsLeft";
+
+            visit.AvailableVisits = visitsLeft - 1;
+
+            subscription.RecordedVisits += 1;
+            _context.Subscriptions.Update(subscription);
+            await _context.SaveChangesAsync();
+            return "VisitTracked";
         }
-        public async Task<int> GetPackageId(int subscriptionId) {
-            var packageId = (await _context.Subscriptions.FindAsync(subscriptionId)).PackageId;
-            return packageId;
-        }
-        /*public async Task<string> SetVisits(int subscriptionId, IEnumerable<PackageItemDto> packageItems) {
-            packageItems.ToList().ForEach(async x => {
-                var Visit = new Visits() {
-                    Id = 0,
-                    AvailableVisits = x.AvailableVisits,
-                    SubscriptionId = subscriptionId,
-                    CultureObjectId = 
-                };
-            });
-        }*/
     }
 }
